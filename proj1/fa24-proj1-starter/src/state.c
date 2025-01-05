@@ -344,25 +344,35 @@ void update_state(game_state_t *state, int (*add_food)(game_state_t *state)) {
 /* Task 5.1 */
 char *read_line(FILE *fp) {
   // TODO: Implement this function.
-  size_t buffer_size = 100;
+  size_t buffer_size = 1024;
+  size_t read_length = 0;
   char* line = malloc(buffer_size * sizeof(char));
   if (line == NULL) {
     printf("failed to create line");
     return NULL;
   }
 
-  if (fgets(line, (int)buffer_size, fp) != NULL) {
+  while (fgets(line + read_length, (int)(buffer_size - read_length), fp) != NULL) {
+    read_length += strlen(line + read_length);
     // check the end
     if (strchr(line, '\n') != NULL) {
       // realloc the char*
-      size_t real_length = (size_t)(strchr(line, '\n') - line + 1);
-      line = realloc(line, (real_length + 1) * sizeof(char));
+      // size_t real_length = (size_t)(strchr(line, '\n') - line + 1);
+      line = realloc(line, (read_length + 1) * sizeof(char));
       if (line == NULL) {
         printf("Memory reallocation failed\n");
         return NULL;
       }
-      line[real_length] = '\0';
+      line[read_length] = '\0';
       return line;
+    }
+
+    // bigger than buffer size
+    buffer_size *= 2;
+    line = realloc(line, buffer_size * sizeof(char));
+    if (line == NULL) {
+      printf("Memory reallocation failed\n");
+      return NULL;
     }
   }
   return NULL;
@@ -386,6 +396,7 @@ game_state_t *load_board(FILE *fp) {
     return NULL;
   }
 
+  // read all lines from the fp
   while ((line = read_line(fp)) != NULL) {
     state->board[line_count] = malloc(strlen(line) * sizeof(char));
     if (state->board[line_count] == NULL) {
@@ -394,8 +405,10 @@ game_state_t *load_board(FILE *fp) {
     }
 
     strcpy(state->board[line_count], line);
+    state->board[line_count][strlen(line) - 1] = '\0';
     line_count++;
 
+    // the line count bigger than capacity, then *2 and realloc
     if (line_count >= capacity) {
       capacity *= 2;
       state->board = realloc(state->board, capacity * sizeof(char*));
@@ -427,11 +440,49 @@ game_state_t *load_board(FILE *fp) {
 */
 static void find_head(game_state_t *state, unsigned int snum) {
   // TODO: Implement this function.
+  // get the tail location
+  char tail = get_board_at(state, state->snakes[snum].tail_row, state->snakes[snum].tail_col);
+  unsigned int headRow = get_next_row(state->snakes[snum].tail_row, tail);
+  unsigned int headCol = get_next_col(state->snakes[snum].tail_col, tail);
+  char next_body = get_board_at(state, headRow, headCol);
+
+  // iter until finding the head("WASD")
+  while (next_body != 'W' && next_body != 'A' && next_body != 'S' && next_body != 'D') {
+    headRow = get_next_row(headRow, next_body);
+    headCol = get_next_col(headCol, next_body);
+    next_body = get_board_at(state, headRow, headCol);
+  }
+
+  // save the location to snake struct
+  state->snakes[snum].head_row = headRow;
+  state->snakes[snum].head_col = headCol;
+
   return;
 }
 
 /* Task 6.2 */
 game_state_t *initialize_snakes(game_state_t *state) {
   // TODO: Implement this function.
-  return NULL;
+  for (unsigned int i = 0; i < state->num_rows; i++) {
+    unsigned int length = (unsigned int)strlen(state->board[i]);
+
+    for (unsigned int j = 0; j < length; j++) {
+      char ch = get_board_at(state, i, j);
+
+      if (is_tail(ch)) {
+        state->num_snakes++;
+        state->snakes = realloc(state->snakes, state->num_snakes * sizeof(snake_t));
+        if (state->snakes == NULL) {
+          printf("Memory reallocation failed\n");
+          return NULL;
+        }
+
+        state->snakes[state->num_snakes - 1].live = true;
+        state->snakes[state->num_snakes - 1].tail_row = i;
+        state->snakes[state->num_snakes - 1].tail_col = j;
+        find_head(state, state->num_snakes - 1);
+      }
+    }
+  }
+  return state;
 }
